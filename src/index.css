@@ -1,18 +1,78 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg:        #000000;
+  --bg1:       #0a0a0a;
+  --bg2:       #111111;
+  --bg3:       #1a1a1a;
+  --border:    #222222;
+  --border2:   #2e2e2e;
+  --text:      #e8e8e8;
+  --text2:     #888888;
+  --text3:     #444444;
+  --green:     #00ff88;
+  --green-dim: #00ff8833;
+  --amber:     #ffaa00;
+  --amber-dim: #ffaa0022;
+  --red:       #ff3b3b;
+  --red-dim:   #ff3b3b22;
+  --blue:      #4488ff;
+  --blue-dim:  #4488ff22;
+  --purple:    #aa88ff;
+}
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, #root {
   height: 100%;
-  background: #0a0a0a;
-  color: #e0e0e0;
-  font-family: 'DM Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Space Grotesk', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
 
 input, textarea, select, button { font-family: inherit; }
+
+input, textarea, select {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--green);
+}
+
 input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+input[type="number"] { -moz-appearance: textfield; }
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+::placeholder { color: var(--text3); }
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; }
-::placeholder { color: #444; }
+
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Scanline effect on cards - subtle */
+.scan::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  border-radius: inherit;
+}

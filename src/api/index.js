@@ -1,45 +1,36 @@
-// All API calls go through this file.
-// It reads the token from localStorage and attaches it to every request.
-// If the server returns 401, it clears the token and reloads the page.
-
 const BASE_URL = import.meta.env.VITE_API_URL
 
-async function request(method, path, body = null) {
-  const token = localStorage.getItem('studyos_token')
+// Generate or retrieve a persistent device ID
+function getDeviceId() {
+  let id = localStorage.getItem('studyos_device_id')
+  if (!id) {
+    id = 'device_' + Date.now() + '_' + Math.random().toString(36).slice(2, 11)
+    localStorage.setItem('studyos_device_id', id)
+  }
+  return id
+}
 
-  const headers = { 'Content-Type': 'application/json' }
-  if (token) headers['Authorization'] = `Bearer ${token}`
+async function request(method, path, body = null) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-device-id': getDeviceId()
+  }
 
   const config = { method, headers }
   if (body) config.body = JSON.stringify(body)
 
   const res = await fetch(`${BASE_URL}${path}`, config)
-
-  // Token expired or invalid — log out
-  if (res.status === 401) {
-    localStorage.removeItem('studyos_token')
-    window.location.reload()
-    return
-  }
-
   const data = await res.json()
 
-  if (!res.ok) {
-    throw new Error(data.error || 'Something went wrong')
-  }
-
+  if (!res.ok) throw new Error(data.error || 'Request failed')
   return data
 }
 
-// Auth
 export const api = {
-  auth: {
-    signup: (body) => request('POST', '/api/auth/signup', body),
-    login:  (body) => request('POST', '/api/auth/login', body),
-    me:     ()     => request('GET',  '/api/auth/me'),
-    updateProfile: (body) => request('PATCH', '/api/auth/profile', body),
+  profile: {
+    get:    ()     => request('GET',   '/api/profile'),
+    update: (body) => request('PATCH', '/api/profile', body),
   },
-
   modules: {
     list:    ()         => request('GET',    '/api/modules'),
     create:  (body)     => request('POST',   '/api/modules', body),
@@ -47,18 +38,15 @@ export const api = {
     delete:  (id)       => request('DELETE', `/api/modules/${id}`),
     analyze: (id)       => request('POST',   `/api/modules/${id}/analyze`),
   },
-
   slots: {
     getByDate: (date)      => request('GET',   `/api/slots?date=${date}`),
     getWeek:   (startDate) => request('GET',   `/api/slots/week?startDate=${startDate}`),
     assign:    (body)      => request('POST',  '/api/slots', body),
     markMissed:(id)        => request('PATCH', `/api/slots/${id}/miss`),
   },
-
   sessions: {
-    complete:       (body)       => request('POST', '/api/sessions', body),
-    history:        (moduleId)   => request('GET',  `/api/sessions/history${moduleId ? `?moduleId=${moduleId}` : ''}`),
-    stats:          ()           => request('GET',  '/api/sessions/stats'),
-    weeklyAnalysis: (startDate)  => request('GET',  `/api/sessions/weekly-analysis?startDate=${startDate}`),
+    complete:       (body)      => request('POST', '/api/sessions', body),
+    stats:          ()          => request('GET',  '/api/sessions/stats'),
+    weeklyAnalysis: (startDate) => request('GET',  `/api/sessions/weekly-analysis?startDate=${startDate}`),
   }
 }

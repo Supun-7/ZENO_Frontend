@@ -1,22 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api'
-import useAuth from '../store/auth'
 
-function CircleProgress({ pct, color, size = 54 }) {
-  const r = (size - 8) / 2
-  const circ = 2 * Math.PI * r
-  const dash = Math.min(pct / 100, 1) * circ
-  return (
-    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', flexShrink: 0 }}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1e1e1e" strokeWidth={4}/>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={4}
-        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"/>
-    </svg>
-  )
-}
-
-export default function ModulesPage() {
-  const { profile } = useAuth()
+export default function ModulesPage({ profile }) {
   const [modules, setModules]   = useState([])
   const [stats, setStats]       = useState([])
   const [expanded, setExpanded] = useState(null)
@@ -28,178 +13,157 @@ export default function ModulesPage() {
   async function load() {
     setLoading(true)
     try {
-      const [mods, st] = await Promise.all([api.modules.list(), api.sessions.stats()])
-      setModules(mods)
-      setStats(st)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
+      const [m, s] = await Promise.all([api.modules.list(), api.sessions.stats()])
+      setModules(m); setStats(s)
+    } finally { setLoading(false) }
   }
 
-  async function triggerAnalysis(moduleId) {
-    setAnalyzing(p => ({ ...p, [moduleId]: true }))
+  async function runAnalysis(id) {
+    setAnalyzing(p => ({...p, [id]:true}))
     try {
-      const updated = await api.modules.analyze(moduleId)
-      setModules(prev => prev.map(m => m.id === moduleId ? updated : m))
-    } catch (err) {
-      alert('AI analysis failed: ' + err.message)
-    } finally {
-      setAnalyzing(p => ({ ...p, [moduleId]: false }))
-    }
+      const updated = await api.modules.analyze(id)
+      setModules(p => p.map(m => m.id===id ? updated : m))
+    } catch(err) { alert('Analysis failed: ' + err.message) }
+    finally { setAnalyzing(p => ({...p, [id]:false})) }
   }
 
-  const GRADE_TARGETS = { 'A': 75, 'B+': 70, 'B': 65 }
-  const targetPct = GRADE_TARGETS[profile?.target_grade] || 75
+  const GRADE_MIN = { 'A':75, 'B+':70, 'B':65 }
+  const targetPct = GRADE_MIN[profile?.target_grade] || 75
 
   const weeksLeft = profile?.exam_date
-    ? Math.max(1, Math.ceil((new Date(profile.exam_date) - new Date()) / (1000 * 60 * 60 * 24 * 7)))
+    ? Math.max(1, Math.ceil((new Date(profile.exam_date) - new Date()) / (1000*60*60*24*7)))
     : 5
 
-  function getRequiredFinal(mod) {
-    if (!mod.mid_weight || !mod.mid_mark) return targetPct
-    const needed = (targetPct - (mod.mid_weight / 100) * mod.mid_mark) / ((100 - mod.mid_weight) / 100)
+  function requiredFinal(mod) {
+    if (!mod.mid_weight || mod.mid_mark == null) return targetPct
+    const needed = (targetPct - (mod.mid_weight/100) * mod.mid_mark) / ((100-mod.mid_weight)/100)
     return Math.round(Math.max(0, Math.min(100, needed)))
   }
 
-  function getStatForModule(moduleId) {
-    return stats.find(s => s.moduleId === moduleId)
-  }
+  const tag = { fontFamily:'JetBrains Mono, monospace', fontSize:10, color:'var(--text3)', letterSpacing:'1px', textTransform:'uppercase', display:'block', marginBottom:4 }
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
-      <div style={{ color: '#444', fontSize: 14 }}>Loading modules...</div>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh' }}>
+      <span style={{ fontFamily:'JetBrains Mono, monospace', fontSize:12, color:'var(--text3)' }}>LOADING...</span>
     </div>
   )
 
   return (
-    <div style={{ padding: '16px 16px 100px', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 2 }}>Modules</h2>
-        <p style={{ fontSize: 13, color: '#555' }}>
-          Target {profile?.target_grade} · {weeksLeft} weeks left
-        </p>
+    <div style={{ padding:'16px 16px 100px' }}>
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, color:'var(--green)', letterSpacing:'2px', marginBottom:4 }}>STUDYOS // MODULES</div>
+        <h2 style={{ fontSize:22, fontWeight:700, color:'var(--text)', marginBottom:2 }}>Module targets</h2>
+        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:11, color:'var(--text3)' }}>
+          TARGET: {profile?.target_grade}  ·  WEEKS LEFT: {weeksLeft}
+        </div>
       </div>
 
       {modules.map(mod => {
-        const stat = getStatForModule(mod.id)
-        const requiredFinal = getRequiredFinal(mod)
-        const isFeasible = requiredFinal <= 100
-        const recommendedHours = mod.recommended_hours?.perWeek
-        const hoursThisWeek = stat?.totalHours || 0
-        const weeklyTarget = recommendedHours || 0
-        const pct = weeklyTarget > 0 ? Math.min(100, Math.round((hoursThisWeek / weeklyTarget) * 100)) : 0
+        const stat     = stats.find(s => s.moduleId===mod.id)
+        const needed   = requiredFinal(mod)
+        const feasible = needed <= 100
+        const recHours = mod.recommended_hours?.perWeek
+        const doneH    = stat?.totalHours || 0
+        const pct      = recHours ? Math.min(100, Math.round((doneH/recHours)*100)) : 0
 
         return (
           <div key={mod.id} style={{
-            background: '#111', borderRadius: 12, marginBottom: 10,
-            border: '1px solid #1e1e1e', borderLeft: `3px solid ${mod.color}`, overflow: 'hidden'
+            background:'var(--bg1)', borderRadius:6, marginBottom:8,
+            border:`1px solid ${expanded===mod.id ? mod.color+'44' : 'var(--border)'}`,
+            borderLeft:`2px solid ${mod.color}`, overflow:'hidden'
           }}>
-            <div onClick={() => setExpanded(expanded === mod.id ? null : mod.id)}
-              style={{ padding: '14px', cursor: 'pointer' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ position: 'relative' }}>
-                  <CircleProgress pct={pct} color={mod.color} />
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: mod.color }}>
-                    {pct}%
+            <div onClick={() => setExpanded(expanded===mod.id ? null : mod.id)}
+              style={{ padding:'12px 14px', cursor:'pointer' }}>
+              <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                    <span style={{ fontSize:15, fontWeight:700, color:mod.color }}>{mod.name}</span>
+                    {!feasible && <span style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, color:'var(--red)', background:'var(--red-dim)', padding:'2px 6px', borderRadius:3 }}>AT RISK</span>}
+                  </div>
+                  <div style={{ display:'flex', gap:12, fontFamily:'JetBrains Mono, monospace', fontSize:11, flexWrap:'wrap' }}>
+                    <span style={{ color:'var(--text3)' }}>{mod.credits}CR</span>
+                    {mod.mid_mark != null && <span style={{ color:'var(--text3)' }}>MID:{mod.mid_mark}%</span>}
+                    <span style={{ color: feasible ? mod.color : 'var(--red)' }}>NEED:{needed}%</span>
+                    <span style={{ color:'var(--text3)' }}>C{mod.confidence_rating}/5</span>
                   </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: '#e0e0e0', marginBottom: 4 }}>{mod.name}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    <span style={{ fontSize: 11, color: '#555' }}>{mod.credits} cr</span>
-                    {mod.mid_mark && <span style={{ fontSize: 11, color: '#555' }}>Mid: {mod.mid_mark}%</span>}
-                    <span style={{ fontSize: 11, fontWeight: 600, color: isFeasible ? mod.color : '#E8526A' }}>
-                      Need {requiredFinal}% final
-                    </span>
-                    <span style={{ fontSize: 11, color: '#444' }}>Confidence: {mod.confidence_rating}/5</span>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  {recommendedHours ? (
+                <div style={{ textAlign:'right', flexShrink:0 }}>
+                  {recHours ? (
                     <>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>{recommendedHours}h</div>
-                      <div style={{ fontSize: 11, color: '#555' }}>per week</div>
+                      <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:20, fontWeight:700, color:'var(--text)' }}>{recHours}h</div>
+                      <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:9, color:'var(--text3)' }}>PER WEEK</div>
                     </>
                   ) : (
-                    <div style={{ fontSize: 11, color: '#555' }}>No AI yet</div>
+                    <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, color:'var(--text3)' }}>NO AI YET</div>
                   )}
                 </div>
               </div>
 
-              {recommendedHours && (
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#555', marginBottom: 4 }}>
-                    <span>This week: {hoursThisWeek.toFixed(1)}h</span>
-                    <span>{Math.max(0, weeklyTarget - hoursThisWeek).toFixed(1)}h remaining</span>
+              {recHours && (
+                <div style={{ marginTop:10 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontFamily:'JetBrains Mono, monospace', fontSize:10, color:'var(--text3)', marginBottom:4 }}>
+                    <span>{doneH.toFixed(1)}h done this week</span>
+                    <span>{Math.max(0, recHours-doneH).toFixed(1)}h remaining</span>
                   </div>
-                  <div style={{ height: 4, background: '#1e1e1e', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: mod.color, borderRadius: 2, transition: 'width 0.4s' }}/>
+                  <div style={{ height:3, background:'var(--bg3)', borderRadius:2 }}>
+                    <div style={{ height:'100%', width:`${pct}%`, background:mod.color, borderRadius:2, transition:'width 0.4s' }}/>
                   </div>
                 </div>
               )}
             </div>
 
-            {expanded === mod.id && (
-              <div style={{ borderTop: '1px solid #1e1e1e', padding: 14 }}>
+            {expanded===mod.id && (
+              <div style={{ borderTop:'1px solid var(--border)', padding:14 }}>
 
-                {!isFeasible && (
-                  <div style={{ background: '#1f0d0d', border: '1px solid #3d1a1a', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
-                    <div style={{ fontSize: 12, color: '#E8526A', fontWeight: 600, marginBottom: 2 }}>⚠ Target may not be achievable</div>
-                    <div style={{ fontSize: 12, color: '#c88' }}>You need {requiredFinal}% in finals. Consider adjusting your target grade.</div>
-                  </div>
-                )}
-
-                {/* AI Recommendation */}
-                {mod.recommended_hours ? (
-                  <div style={{ background: '#0d1020', borderRadius: 8, padding: '12px', marginBottom: 14 }}>
-                    <div style={{ fontSize: 11, color: '#7C6FE0', fontWeight: 600, letterSpacing: '0.5px', marginBottom: 6 }}>AI RECOMMENDATION</div>
-                    <div style={{ fontSize: 13, color: '#aaa', lineHeight: 1.6, marginBottom: 10 }}>
-                      {mod.recommended_hours.reasoning}
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <div style={{ flex: 1, background: '#111', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: mod.color }}>{mod.recommended_hours.perWeek}h</div>
-                        <div style={{ fontSize: 10, color: '#555' }}>per week</div>
-                      </div>
-                      <div style={{ flex: 1, background: '#111', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: mod.color }}>{mod.recommended_hours.totalNeeded}h</div>
-                        <div style={{ fontSize: 10, color: '#555' }}>total needed</div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => triggerAnalysis(mod.id)}
-                    disabled={analyzing[mod.id] || !mod.overview_text}
+                {!mod.recommended_hours ? (
+                  <button onClick={() => runAnalysis(mod.id)} disabled={analyzing[mod.id] || !mod.overview_text}
                     style={{
-                      width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #7C6FE044',
-                      background: '#0d0d1a', color: analyzing[mod.id] ? '#555' : '#7C6FE0',
-                      fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 14
+                      width:'100%', padding:'10px', borderRadius:4, marginBottom:14,
+                      border:`1px solid ${mod.overview_text && !analyzing[mod.id] ? mod.color : 'var(--border)'}`,
+                      background: mod.overview_text && !analyzing[mod.id] ? mod.color+'11' : 'transparent',
+                      color: mod.overview_text && !analyzing[mod.id] ? mod.color : 'var(--text3)',
+                      fontSize:11, fontWeight:700, cursor: mod.overview_text ? 'pointer' : 'default',
+                      fontFamily:'JetBrains Mono, monospace', letterSpacing:'1px'
                     }}>
-                    {analyzing[mod.id] ? '⟳ Analyzing with AI...' : mod.overview_text ? '✦ Run AI Analysis' : 'Add overview text to enable AI analysis'}
+                    {analyzing[mod.id] ? '⟳ ANALYZING...' : mod.overview_text ? '✦ RUN AI ANALYSIS' : 'ADD OVERVIEW TO ENABLE AI'}
                   </button>
+                ) : (
+                  <div style={{ background:'#00ff8808', border:'1px solid var(--green-dim)', borderRadius:6, padding:12, marginBottom:14 }}>
+                    <span style={tag}>AI RECOMMENDATION</span>
+                    <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+                      <div style={{ flex:1, background:'var(--bg2)', borderRadius:4, padding:'8px', textAlign:'center' }}>
+                        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:18, fontWeight:700, color:mod.color }}>{mod.recommended_hours.perWeek}h</div>
+                        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:9, color:'var(--text3)' }}>PER WEEK</div>
+                      </div>
+                      <div style={{ flex:1, background:'var(--bg2)', borderRadius:4, padding:'8px', textAlign:'center' }}>
+                        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:18, fontWeight:700, color:mod.color }}>{mod.recommended_hours.totalNeeded}h</div>
+                        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:9, color:'var(--text3)' }}>TOTAL</div>
+                      </div>
+                    </div>
+                    <p style={{ fontSize:12, color:'var(--text2)', lineHeight:1.6 }}>{mod.recommended_hours.reasoning}</p>
+                    <button onClick={() => runAnalysis(mod.id)} disabled={analyzing[mod.id]}
+                      style={{ marginTop:10, padding:'4px 10px', borderRadius:4, border:'1px solid var(--border)', background:'transparent', color:'var(--text3)', fontSize:10, cursor:'pointer', fontFamily:'JetBrains Mono, monospace' }}>
+                      {analyzing[mod.id] ? '⟳ RUNNING...' : '↺ RE-ANALYZE'}
+                    </button>
+                  </div>
                 )}
 
-                {/* Topics */}
                 {mod.topics?.length > 0 && (
                   <>
-                    <div style={{ fontSize: 11, color: '#555', fontWeight: 600, letterSpacing: '0.5px', marginBottom: 10 }}>EXAM TOPICS</div>
+                    <span style={tag}>EXAM TOPICS</span>
                     {mod.topics.map((t, i) => (
-                      <div key={i} style={{ marginBottom: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: '#e0e0e0' }}>{t.topic}</span>
-                          <span style={{
-                            fontSize: 10, padding: '2px 8px', borderRadius: 4, fontWeight: 600,
-                            background: t.weight === 'high' ? '#1f1a0d' : t.weight === 'medium' ? '#0d1020' : '#0f1a0f',
-                            color: t.weight === 'high' ? '#F5A623' : t.weight === 'medium' ? '#7C6FE0' : '#2ECC9A'
-                          }}>{t.weight}</span>
+                      <div key={i} style={{ marginBottom:10 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                          <span style={{ fontSize:13, fontWeight:600, color:'var(--text)' }}>{t.topic}</span>
+                          <span style={{ fontFamily:'JetBrains Mono, monospace', fontSize:9, padding:'2px 6px', borderRadius:3, fontWeight:700,
+                            background: t.weight==='high' ? 'var(--amber-dim)' : t.weight==='medium' ? 'var(--blue-dim)' : 'var(--green-dim)',
+                            color: t.weight==='high' ? 'var(--amber)' : t.weight==='medium' ? 'var(--blue)' : 'var(--green)'
+                          }}>{t.weight.toUpperCase()}</span>
                         </div>
                         {t.subtopics?.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
                             {t.subtopics.map((st, j) => (
-                              <span key={j} style={{ fontSize: 11, color: '#666', background: '#1a1a1a', padding: '2px 8px', borderRadius: 4 }}>{st}</span>
+                              <span key={j} style={{ fontSize:11, color:'var(--text3)', background:'var(--bg2)', padding:'2px 8px', borderRadius:3, fontFamily:'JetBrains Mono, monospace' }}>{st}</span>
                             ))}
                           </div>
                         )}
@@ -208,34 +172,28 @@ export default function ModulesPage() {
                   </>
                 )}
 
-                {/* Session stats */}
-                {stat && stat.totalSessions > 0 && (
-                  <div style={{ borderTop: '1px solid #1e1e1e', paddingTop: 12, marginTop: 12 }}>
-                    <div style={{ fontSize: 11, color: '#555', fontWeight: 600, letterSpacing: '0.5px', marginBottom: 8 }}>YOUR STATS</div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <div style={{ flex: 1, background: '#0a0a0a', borderRadius: 6, padding: '8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{stat.totalHours}h</div>
-                        <div style={{ fontSize: 10, color: '#555' }}>studied</div>
-                      </div>
-                      <div style={{ flex: 1, background: '#0a0a0a', borderRadius: 6, padding: '8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: mod.color }}>{stat.avgEfficiency || '—'}</div>
-                        <div style={{ fontSize: 10, color: '#555' }}>avg score</div>
-                      </div>
-                      <div style={{ flex: 1, background: '#0a0a0a', borderRadius: 6, padding: '8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{stat.totalSessions}</div>
-                        <div style={{ fontSize: 10, color: '#555' }}>sessions</div>
-                      </div>
+                {stat?.totalSessions > 0 && (
+                  <div style={{ borderTop:'1px solid var(--border)', paddingTop:12, marginTop:12 }}>
+                    <span style={tag}>PERFORMANCE</span>
+                    <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+                      {[
+                        { l:'HOURS', v: stat.totalHours+'h' },
+                        { l:'SESSIONS', v: stat.totalSessions },
+                        { l:'AVG SCORE', v: stat.avgEfficiency ? stat.avgEfficiency+'/100' : '—' },
+                      ].map((c,i) => (
+                        <div key={i} style={{ flex:1, background:'var(--bg2)', borderRadius:4, padding:'8px', textAlign:'center' }}>
+                          <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:16, fontWeight:700, color: i===2 && stat.avgEfficiency ? (stat.avgEfficiency>=80?'var(--green)':stat.avgEfficiency>=65?'var(--amber)':'var(--red)') : 'var(--text)' }}>{c.v}</div>
+                          <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:9, color:'var(--text3)' }}>{c.l}</div>
+                        </div>
+                      ))}
                     </div>
                     {stat.trend?.length > 1 && (
-                      <div style={{ marginTop: 10 }}>
-                        <div style={{ fontSize: 11, color: '#555', marginBottom: 6 }}>Efficiency trend (last 5)</div>
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 36 }}>
-                          {stat.trend.map((score, i) => (
-                            <div key={i} style={{
-                              flex: 1, borderRadius: 3,
-                              height: `${Math.round((score / 100) * 36)}px`,
-                              background: score >= 80 ? '#2ECC9A' : score >= 65 ? '#7C6FE0' : '#E8526A'
-                            }}/>
+                      <div>
+                        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:9, color:'var(--text3)', marginBottom:4 }}>EFFICIENCY TREND</div>
+                        <div style={{ display:'flex', gap:3, alignItems:'flex-end', height:28 }}>
+                          {stat.trend.map((s,i) => (
+                            <div key={i} style={{ flex:1, borderRadius:2, height:`${Math.round((s/100)*28)}px`,
+                              background: s>=80 ? 'var(--green)' : s>=65 ? 'var(--amber)' : 'var(--red)' }}/>
                           ))}
                         </div>
                       </div>
