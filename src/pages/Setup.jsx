@@ -59,7 +59,7 @@ export default function Setup({ onDone }) {
 
       {/* Header */}
       <div style={{ marginBottom:32 }}>
-        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:11, color:'var(--green)', letterSpacing:'2px', marginBottom:8 }}>STUDYOS // INIT</div>
+        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:11, color:'var(--green)', letterSpacing:'2px', marginBottom:8 }}>ZENO // INIT</div>
         <h1 style={{ fontSize:24, fontWeight:700, color:'var(--text)', marginBottom:6 }}>
           {step === 0 ? 'System setup' : 'Load modules'}
         </h1>
@@ -231,7 +231,7 @@ export default function Setup({ onDone }) {
               background: saving ? 'transparent' : 'var(--green-dim)',
               color: saving ? 'var(--text3)' : 'var(--green)',
               fontSize:14, fontWeight:700, cursor: saving ? 'default' : 'pointer', letterSpacing:'1px'
-            }}>{saving ? 'INITIALIZING...' : 'LAUNCH STUDYOS →'}</button>
+            }}>{saving ? 'INITIALIZING...' : 'LAUNCH ZENO →'}</button>
           </div>
         </div>
       )}
