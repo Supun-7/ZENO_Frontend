@@ -1,78 +1,163 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 :root {
-  --bg:        #000000;
-  --bg1:       #0a0a0a;
-  --bg2:       #111111;
-  --bg3:       #1a1a1a;
-  --border:    #222222;
-  --border2:   #2e2e2e;
-  --text:      #e8e8e8;
-  --text2:     #888888;
-  --text3:     #444444;
-  --green:     #00ff88;
-  --green-dim: #00ff8833;
-  --amber:     #ffaa00;
-  --amber-dim: #ffaa0022;
-  --red:       #ff3b3b;
-  --red-dim:   #ff3b3b22;
-  --blue:      #4488ff;
-  --blue-dim:  #4488ff22;
-  --purple:    #aa88ff;
+  --cream:       #FAF7F2;
+  --cream-dark:  #F2EDE4;
+  --cream-deep:  #E8DFD0;
+  --sage:        #7C9E87;
+  --sage-light:  #A8C4B0;
+  --sage-dim:    #7C9E8722;
+  --terra:       #C4714A;
+  --terra-light: #D4917A;
+  --terra-dim:   #C4714A18;
+  --ink:         #2C2416;
+  --ink-mid:     #5C4F3A;
+  --ink-soft:    #8B7D6B;
+  --ink-pale:    #B8ADA0;
+  --border:      #DDD5C8;
+  --border-soft: #EAE3D8;
+  --white:       #FFFFFF;
+  --done-bg:     #EDF4EF;
+  --done-border: #A8C4B0;
+  --miss-bg:     #FBF0EC;
+  --miss-border: #D4917A;
+  --gold:        #D4A843;
+  --gold-dim:    #D4A84318;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, #root {
   height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'DM Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
 
-input, textarea, select, button { font-family: inherit; }
+h1, h2, h3 {
+  font-family: 'Playfair Display', Georgia, serif;
+}
 
 input, textarea, select {
-  background: var(--bg2);
-  border: 1px solid var(--border2);
-  border-radius: 6px;
-  color: var(--text);
-  padding: 10px 12px;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  color: var(--ink);
+  padding: 11px 14px;
   font-size: 14px;
+  font-family: 'DM Sans', sans-serif;
   outline: none;
   width: 100%;
-  transition: border-color 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 input:focus, textarea:focus, select:focus {
-  border-color: var(--green);
+  border-color: var(--sage);
+  box-shadow: 0 0 0 3px var(--sage-dim);
 }
 
-input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
-input[type="number"] { -moz-appearance: textfield; }
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.4;
+  cursor: pointer;
+}
 
-::placeholder { color: var(--text3); }
+::placeholder { color: var(--ink-pale); }
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; }
 
-.mono { font-family: 'JetBrains Mono', monospace; }
-
-/* Scanline effect on cards - subtle */
-.scan::after {
-  content: '';
+/* Decorative blobs - used as page accents */
+.blob {
   position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0,0,0,0.03) 2px,
-    rgba(0,0,0,0.03) 4px
-  );
+  border-radius: 50%;
+  filter: blur(40px);
   pointer-events: none;
-  border-radius: inherit;
+  opacity: 0.18;
+  z-index: 0;
 }
+
+.blob-sage  { background: var(--sage); }
+.blob-terra { background: var(--terra); }
+.blob-gold  { background: var(--gold); }
+
+/* Card styles */
+.card {
+  background: var(--white);
+  border: 1.5px solid var(--border-soft);
+  border-radius: 16px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.card-soft {
+  background: var(--cream-dark);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+/* Buttons */
+.btn-primary {
+  background: var(--sage);
+  color: var(--white);
+  border: none;
+  border-radius: 12px;
+  padding: 13px 24px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.2s, transform 0.1s;
+  letter-spacing: 0.2px;
+}
+.btn-primary:hover   { background: #6A8E75; }
+.btn-primary:active  { transform: scale(0.98); }
+.btn-primary:disabled { background: var(--ink-pale); cursor: default; }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--ink-mid);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.btn-secondary:hover { border-color: var(--sage); background: var(--sage-dim); }
+
+.btn-terra {
+  background: var(--terra);
+  color: var(--white);
+  border: none;
+  border-radius: 12px;
+  padding: 13px 24px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.2s;
+}
+.btn-terra:hover { background: var(--terra-light); }
+
+/* Label */
+.field-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+/* Efficiency score colors */
+.score-high   { color: var(--sage); }
+.score-mid    { color: var(--gold); }
+.score-low    { color: var(--terra); }

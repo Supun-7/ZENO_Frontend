@@ -2,46 +2,41 @@ import { useState, useEffect } from 'react'
 import { format, isPast } from 'date-fns'
 import { api } from '../api'
 
-const SLOT_DEFS = [
-  { key:'M1', period:'MORNING', label:'Block 01', dur:120 },
-  { key:'M2', period:'MORNING', label:'Block 02', dur:120 },
-  { key:'E1', period:'EVENING', label:'Block 03', dur:60  },
-  { key:'E2', period:'EVENING', label:'Block 04', dur:60  },
-  { key:'E3', period:'EVENING', label:'Block 05', dur:30  },
-  { key:'N1', period:'NIGHT',   label:'Block 06', dur:150 },
-]
-
-function getSlotTime(key, wakeHour) {
-  const p = n => String(n).padStart(2,'0')
-  const t = {
-    M1:[wakeHour,0,wakeHour+2,0], M2:[wakeHour+2,15,wakeHour+4,15],
-    E1:[16,0,17,0], E2:[17,15,18,15], E3:[18,30,19,0], N1:[20,30,23,0]
-  }
-  const [sh,sm,eh,em] = t[key]
-  return `${p(sh)}:${p(sm)} — ${p(eh)}:${p(em)}`
+const SLOT_META = {
+  S1: { time: '08:30 – 10:30', dur: 120, label: 'Morning block' },
+  S2: { time: '10:45 – 12:30', dur: 105, label: 'Mid-morning block' },
+  S3: { time: '13:30 – 14:30', dur: 60,  label: 'Afternoon block' },
+  S4: { time: '14:45 – 16:00', dur: 75,  label: 'Late afternoon block' },
 }
 
-function isPastSlot(key, wakeHour) {
-  const endMap = {
-    M1:[wakeHour+2,0], M2:[wakeHour+4,15],
-    E1:[17,0], E2:[18,15], E3:[19,0], N1:[23,0]
-  }
-  const [eh,em] = endMap[key]
-  const end = new Date()
-  end.setHours(eh,em,0,0)
+function isPastSlot(slotKey) {
+  const endTimes = { S1: [10,30], S2: [12,30], S3: [14,30], S4: [16,0] }
+  const [h, m]   = endTimes[slotKey]
+  const end      = new Date()
+  end.setHours(h, m, 0, 0)
   return isPast(end)
 }
 
-function SlotCard({ def, slot, modules, wakeHour, onAssign, onComplete, onMiss }) {
-  const [showAssign, setShowAssign]     = useState(false)
+function ScoreBadge({ score, label }) {
+  const color = score >= 80 ? 'var(--sage)' : score >= 65 ? 'var(--gold)' : 'var(--terra)'
+  const bg    = score >= 80 ? 'var(--done-bg)' : score >= 65 ? 'var(--gold-dim)' : 'var(--miss-bg)'
+  return (
+    <span style={{ background: bg, color, fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 20 }}>
+      {label} · {score}/100
+    </span>
+  )
+}
+
+function SlotCard({ slot, onComplete, onMiss }) {
   const [showComplete, setShowComplete] = useState(false)
   const [summary, setSummary]           = useState('')
   const [grading, setGrading]           = useState(false)
 
-  const mod    = modules.find(m => m.id === slot?.module_id)
-  const past   = isPastSlot(def.key, wakeHour)
-  const status = slot?.status || 'empty'
-  const accentColor = status==='done' ? '#00ff88' : status==='missed' ? '#ff3b3b' : mod?.color || '#2e2e2e'
+  const meta   = SLOT_META[slot.slot_key]
+  const status = slot.status
+  const mod    = slot.module
+  const past   = isPastSlot(slot.slot_key)
+  const sess   = slot.session
 
   async function handleComplete() {
     if (!summary.trim()) return
@@ -51,179 +46,181 @@ function SlotCard({ def, slot, modules, wakeHour, onAssign, onComplete, onMiss }
       onComplete(result)
       setShowComplete(false)
       setSummary('')
-    } catch(err) { alert(err.message) }
-    finally { setGrading(false) }
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setGrading(false)
+    }
   }
 
-  const scoreColor = s => s >= 80 ? '#00ff88' : s >= 65 ? '#ffaa00' : '#ff3b3b'
+  async function handleMiss() {
+    try {
+      await api.slots.markMissed(slot.id)
+      onMiss()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const cardBg = status === 'done'   ? 'var(--done-bg)'
+    : status === 'missed' ? 'var(--miss-bg)'
+    : 'var(--white)'
+
+  const borderColor = status === 'done'   ? 'var(--done-border)'
+    : status === 'missed' ? 'var(--miss-border)'
+    : mod ? mod.color + '88' : 'var(--border-soft)'
+
+  const leftAccent = mod?.color || (status === 'done' ? 'var(--sage)' : status === 'missed' ? 'var(--terra)' : 'var(--border)')
 
   return (
-    <div style={{
-      background:'var(--bg1)', borderRadius:6, marginBottom:6,
-      border:`1px solid ${accentColor}33`,
-      borderLeft:`2px solid ${accentColor}`,
-      overflow:'hidden'
-    }}>
-      <div style={{ padding:'10px 12px', display:'flex', alignItems:'center', gap:10 }}>
-        <div style={{ flexShrink:0 }}>
-          <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, color:'var(--text3)', marginBottom:1 }}>{def.key}</div>
-          <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, color:'var(--text3)' }}>{def.dur}m</div>
-        </div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:11, color:'var(--text3)', marginBottom:2, fontFamily:'JetBrains Mono, monospace' }}>
-            {getSlotTime(def.key, wakeHour)}
+    <div style={{ background: cardBg, border: `1.5px solid ${borderColor}`, borderLeft: `4px solid ${leftAccent}`, borderRadius: 14, marginBottom: 12, overflow: 'hidden' }}>
+      <div style={{ padding: '14px 16px' }}>
+        {/* Slot header */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div>
+            <p style={{ fontSize: 11, color: 'var(--ink-pale)', fontWeight: 600, letterSpacing: '0.4px', textTransform: 'uppercase', marginBottom: 3 }}>
+              {meta.label} · {meta.time}
+            </p>
+            <p style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, color: status === 'done' ? 'var(--sage)' : status === 'missed' ? 'var(--terra)' : mod ? 'var(--ink)' : 'var(--ink-pale)', fontWeight: 600 }}>
+              {mod ? mod.name : status === 'missed' ? 'Missed' : 'Not assigned'}
+            </p>
           </div>
-          <div style={{ fontSize:14, fontWeight:600, color: accentColor, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-            {mod ? mod.name : status==='missed' ? 'MISSED' : status==='empty' && past ? 'UNASSIGNED' : '— unassigned —'}
+          {status === 'done' && sess && (
+            <ScoreBadge score={sess.efficiency_score} label={sess.efficiency_label} />
+          )}
+          {status === 'missed' && (
+            <span style={{ fontSize: 12, color: 'var(--terra)', fontWeight: 600 }}>✕ Missed</span>
+          )}
+        </div>
+
+        {/* Done — show feedback */}
+        {status === 'done' && sess && (
+          <div style={{ borderTop: '1px solid var(--done-border)', paddingTop: 10, marginTop: 4 }}>
+            <p style={{ fontSize: 12, color: 'var(--ink-soft)', fontStyle: 'italic', marginBottom: 6, lineHeight: 1.5 }}>
+              "{(sess.summary || '').slice(0, 130)}{(sess.summary || '').length > 130 ? '...' : ''}"
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--sage)', lineHeight: 1.5 }}>{sess.feedback}</p>
+            {sess.tip && (
+              <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 6, lineHeight: 1.5 }}>
+                → {sess.tip}
+              </p>
+            )}
           </div>
-          {status==='done' && slot.session && (
-            <div style={{ fontSize:11, color:'var(--green)', marginTop:2, fontFamily:'JetBrains Mono, monospace' }}>
-              ✓ {slot.session.efficiency_label} [{slot.session.efficiency_score}]
-            </div>
-          )}
-          {status==='missed' && (
-            <div style={{ fontSize:11, color:'var(--red)', marginTop:2, fontFamily:'JetBrains Mono, monospace' }}>✕ LOGGED AS MISSED</div>
-          )}
-        </div>
-        <div style={{ flexShrink:0, display:'flex', gap:6 }}>
-          {status==='empty' && !past && (
-            <button onClick={() => setShowAssign(!showAssign)} style={{ padding:'5px 10px', borderRadius:4, border:'1px solid var(--border2)', background:'transparent', color:'var(--text2)', fontSize:11, cursor:'pointer', fontFamily:'JetBrains Mono, monospace' }}>
-              ASSIGN
-            </button>
-          )}
-          {status==='pending' && !past && (
-            <span style={{ fontSize:10, color:'var(--text3)', alignSelf:'center', fontFamily:'JetBrains Mono, monospace' }}>UPCOMING</span>
-          )}
-          {status==='pending' && past && (
-            <>
-              <button onClick={() => setShowComplete(true)} style={{ padding:'5px 10px', borderRadius:4, border:'1px solid var(--green)', background:'var(--green-dim)', color:'var(--green)', fontSize:11, cursor:'pointer', fontWeight:700, fontFamily:'JetBrains Mono, monospace' }}>
-                DONE
-              </button>
-              <button onClick={async () => { await api.slots.markMissed(slot.id); onMiss() }} style={{ padding:'5px 8px', borderRadius:4, border:'1px solid var(--red)', background:'var(--red-dim)', color:'var(--red)', fontSize:11, cursor:'pointer', fontFamily:'JetBrains Mono, monospace' }}>
-                MISS
-              </button>
-            </>
-          )}
-        </div>
+        )}
+
+        {/* Action buttons */}
+        {status === 'pending' && (
+          <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+            {past ? (
+              <>
+                <button onClick={() => setShowComplete(!showComplete)} style={{
+                  flex: 2, padding: '9px', borderRadius: 10, border: 'none',
+                  background: 'var(--sage)', color: 'white',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif'
+                }}>
+                  Mark complete
+                </button>
+                <button onClick={handleMiss} style={{
+                  flex: 1, padding: '9px', borderRadius: 10,
+                  border: '1.5px solid var(--miss-border)', background: 'transparent',
+                  color: 'var(--terra)', fontSize: 13, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif'
+                }}>
+                  Missed
+                </button>
+              </>
+            ) : (
+              <div style={{ padding: '8px 12px', background: 'var(--sage-dim)', borderRadius: 10, flex: 1, textAlign: 'center' }}>
+                <p style={{ fontSize: 12, color: 'var(--sage)', fontWeight: 500 }}>
+                  Upcoming · starts at {meta.time.split(' – ')[0]}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {showAssign && (
-        <div style={{ borderTop:'1px solid var(--border)', padding:'10px 12px' }}>
-          <div style={{ fontSize:10, color:'var(--text3)', fontFamily:'JetBrains Mono, monospace', marginBottom:8 }}>SELECT MODULE:</div>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-            {modules.map(m => (
-              <button key={m.id} onClick={() => { onAssign(def.key, m.id); setShowAssign(false) }} style={{
-                padding:'5px 10px', borderRadius:4, border:`1px solid ${m.color}55`,
-                background: m.color+'11', color:m.color, fontSize:12, cursor:'pointer',
-                fontWeight:600
-              }}>{m.name}</button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {showComplete && (
-        <div style={{ borderTop:'1px solid var(--border)', padding:'10px 12px' }}>
-          <div style={{ fontSize:10, color:'var(--text3)', fontFamily:'JetBrains Mono, monospace', marginBottom:6 }}>SESSION SUMMARY // AI WILL GRADE THIS:</div>
+      {/* Complete panel */}
+      {showComplete && status === 'pending' && (
+        <div style={{ borderTop: '1px solid var(--border-soft)', padding: '14px 16px', background: 'var(--cream-dark)' }}>
+          <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 10, lineHeight: 1.5 }}>
+            What did you study? Be specific — AI will analyse your session and give feedback.
+          </p>
           <textarea
-            style={{ minHeight:80, resize:'vertical', lineHeight:1.6, fontSize:13 }}
-            placeholder="What exactly did you study? Topics covered, what you understood, what's still unclear..."
+            style={{ minHeight: 90, resize: 'vertical', lineHeight: 1.6, fontSize: 13, marginBottom: 10 }}
+            placeholder="e.g. Covered process scheduling — FCFS, SJF, Round Robin. Understood preemption clearly. Still fuzzy on multilevel queue priorities..."
             value={summary}
             onChange={e => setSummary(e.target.value)}
           />
-          <button onClick={handleComplete} disabled={!summary.trim() || grading} style={{
-            marginTop:8, width:'100%', padding:'9px', borderRadius:4,
-            border:`1px solid ${summary.trim() && !grading ? 'var(--green)' : 'var(--border)'}`,
-            background: summary.trim() && !grading ? 'var(--green-dim)' : 'transparent',
-            color: summary.trim() && !grading ? 'var(--green)' : 'var(--text3)',
-            fontSize:12, fontWeight:700, cursor: summary.trim() ? 'pointer' : 'default',
-            fontFamily:'JetBrains Mono, monospace', letterSpacing:'1px'
-          }}>{grading ? 'GRADING...' : 'SUBMIT →'}</button>
-        </div>
-      )}
-
-      {status==='done' && slot.session && (
-        <div style={{ borderTop:'1px solid #00ff8822', padding:'8px 12px', background:'#00ff8808' }}>
-          <div style={{ fontSize:12, color:'var(--text2)', marginBottom:4, lineHeight:1.5, fontStyle:'italic' }}>
-            "{(slot.session.summary||'').slice(0,120)}{(slot.session.summary||'').length > 120 ? '...' : ''}"
-          </div>
-          <div style={{ fontSize:12, color:'var(--green)' }}>{slot.session.feedback}</div>
-          {slot.session.tip && <div style={{ fontSize:12, color:'var(--text3)', marginTop:3 }}>→ {slot.session.tip}</div>}
+          <button
+            onClick={handleComplete}
+            disabled={!summary.trim() || grading}
+            className={summary.trim() && !grading ? 'btn-primary' : ''}
+            style={!summary.trim() || grading ? {
+              width: '100%', padding: '11px', borderRadius: 10, border: 'none',
+              background: 'var(--border)', color: 'var(--ink-pale)',
+              fontSize: 14, fontWeight: 600, cursor: 'default', fontFamily: 'DM Sans, sans-serif'
+            } : {}}>
+            {grading ? 'Grading your session...' : 'Submit & get feedback →'}
+          </button>
         </div>
       )}
     </div>
   )
 }
 
-export default function TodayPage({ profile }) {
-  const [slots, setSlots]     = useState([])
-  const [modules, setModules] = useState([])
+export default function TodayPage() {
+  const [slots, setSlots]   = useState([])
   const [loading, setLoading] = useState(true)
-  const today    = format(new Date(), 'yyyy-MM-dd')
-  const wakeHour = profile?.wake_hour || 6
+  const today = format(new Date(), 'yyyy-MM-dd')
 
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
     try {
-      const [s, m] = await Promise.all([api.slots.getByDate(today), api.modules.list()])
-      setSlots(s); setModules(m)
-    } finally { setLoading(false) }
+      const data = await api.slots.getByDate(today)
+      setSlots(data)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  async function handleAssign(slotKey, moduleId) {
-    try {
-      const s = await api.slots.assign({ date:today, slotKey, moduleId })
-      setSlots(p => {
-        const exists = p.find(x => x.slot_key===slotKey)
-        return exists ? p.map(x => x.slot_key===slotKey ? s : x) : [...p, s]
-      })
-    } catch(err) { alert(err.message) }
-  }
-
-  async function refresh() { setSlots(await api.slots.getByDate(today)) }
-
-  const getSlot    = key => slots.find(s => s.slot_key===key)
-  const doneCount   = slots.filter(s => s.status==='done').length
-  const missedCount = slots.filter(s => s.status==='missed').length
-
-  const periods = ['MORNING','EVENING','NIGHT']
+  const activeSlots = slots.filter(s => s.status !== 'rest')
+  const doneCount   = activeSlots.filter(s => s.status === 'done').length
+  const missedCount = activeSlots.filter(s => s.status === 'missed').length
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh' }}>
-      <span style={{ fontFamily:'JetBrains Mono, monospace', fontSize:12, color:'var(--text3)' }}>LOADING...</span>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+      <p style={{ color: 'var(--ink-pale)', fontSize: 14 }}>Loading today...</p>
     </div>
   )
 
   return (
-    <div style={{ padding:'16px 16px 100px' }}>
-      <div style={{ marginBottom:20 }}>
-        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, color:'var(--green)', letterSpacing:'2px', marginBottom:4 }}>
-          {format(new Date(), 'yyyy.MM.dd')}
-        </div>
-        <h2 style={{ fontSize:22, fontWeight:700, color:'var(--text)', marginBottom:2 }}>
-          {format(new Date(), 'EEEE').toUpperCase()}
-        </h2>
-        <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:11, color:'var(--text3)' }}>
-          {doneCount > 0 && <span style={{ color:'var(--green)' }}>{doneCount} DONE  </span>}
-          {missedCount > 0 && <span style={{ color:'var(--red)' }}>{missedCount} MISSED  </span>}
-          {(6 - doneCount - missedCount) > 0 && <span>{6 - doneCount - missedCount} REMAINING</span>}
-        </div>
+    <div style={{ padding: '24px 20px 100px', maxWidth: 440, margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ marginBottom: 24 }}>
+        <p style={{ fontSize: 12, color: 'var(--sage)', fontWeight: 600, letterSpacing: '0.5px', marginBottom: 4 }}>
+          {format(new Date(), 'EEEE, MMMM d')}
+        </p>
+        <h2 style={{ fontSize: 26, color: 'var(--ink)', marginBottom: 6 }}>Today's sessions</h2>
+        <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+          {doneCount} of {activeSlots.length} done
+          {missedCount > 0 && <span style={{ color: 'var(--terra)' }}> · {missedCount} missed</span>}
+        </p>
       </div>
 
-      {periods.map(period => (
-        <div key={period} style={{ marginBottom:20 }}>
-          <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, color:'var(--text3)', letterSpacing:'2px', marginBottom:8, borderBottom:'1px solid var(--border)', paddingBottom:6 }}>
-            // {period}
-          </div>
-          {SLOT_DEFS.filter(s => s.period===period).map(def => (
-            <SlotCard key={def.key} def={def} slot={getSlot(def.key)}
-              modules={modules} wakeHour={wakeHour}
-              onAssign={handleAssign} onComplete={refresh} onMiss={refresh} />
-          ))}
+      {activeSlots.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <p style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, color: 'var(--ink-soft)', marginBottom: 8 }}>Rest day</p>
+          <p style={{ fontSize: 14, color: 'var(--ink-pale)' }}>No study slots scheduled today</p>
         </div>
-      ))}
+      ) : (
+        activeSlots.map(slot => (
+          <SlotCard key={slot.id} slot={slot} onComplete={load} onMiss={load} />
+        ))
+      )}
     </div>
   )
 }

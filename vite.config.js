@@ -8,11 +8,11 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'StudyOS',
-        short_name: 'StudyOS',
-        description: 'Smart study planner for final exams',
-        theme_color: '#0a0a0a',
-        background_color: '#0a0a0a',
+        name: 'Zeno',
+        short_name: 'Zeno',
+        description: 'Your calm study companion',
+        theme_color: '#FAF7F2',
+        background_color: '#FAF7F2',
         display: 'standalone',
         orientation: 'portrait',
         icons: [
