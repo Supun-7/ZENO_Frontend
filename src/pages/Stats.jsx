@@ -372,71 +372,122 @@ export default function StatsPage({ profile, onBack }) {
           </div>
         )}
 
-        {/* ── Mid marks vs target ── */}
-        {modules.some(m => m.mid_mark != null) && (
+        {/* ── Marks vs target (mid + project) ── */}
+        {modules.some(m => m.mid_mark != null || m.assessments?.weight) && (
           <div className="card" style={{ marginBottom: 12, animation: 'fadeUp 0.35s 0.16s ease both' }}>
             <SectionHead
-              label="Mid marks vs target"
+              label="Marks vs target"
               sub={`Target: ${profile?.target_grade || 'A'} (need ${targetPct}%+ overall)`}
             />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {modules.filter(m => m.mid_mark != null).map(mod => {
-                const mid    = mod.mid_mark
-                const weight = mod.mid_weight || 30
-                const finalW = 100 - weight
-                const needed = finalW > 0
-                  ? Math.round((targetPct - (weight / 100) * mid) / (finalW / 100))
-                  : targetPct
-                const feasible = needed <= 100
-                const midPct   = Math.min(100, mid)
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {modules.filter(m => m.mid_mark != null || m.assessments?.weight).map(mod => {
+                const midW   = parseFloat(mod.mid_weight) || 0
+                const projW  = mod.assessments?.weight != null ? parseFloat(mod.assessments.weight) : 0
+                const finalW = Math.max(0, 100 - midW - projW)
+
+                const midContrib = mod.mid_mark != null ? (midW / 100) * mod.mid_mark : 0
+                const proj = mod.assessments
+                const projPct = proj?.scored != null && proj?.outOf > 0
+                  ? Math.round((proj.scored / proj.outOf) * 100) : null
+                const projContrib = projPct != null ? (projW / 100) * projPct : 0
+
+                const needed   = finalW > 0
+                  ? Math.round((targetPct - midContrib - projContrib) / (finalW / 100))
+                  : null
+                const feasible = needed == null || needed <= 100
 
                 return (
                   <div key={mod.id}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+                    {/* Module name row */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <div style={{ width: 8, height: 8, borderRadius: '50%', background: mod.color || 'var(--sage)', flexShrink: 0 }} />
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{mod.name}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{mod.name}</span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {needed != null && (
                         <span style={{
-                          fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20,
+                          fontSize: 10, fontWeight: 800, padding: '2px 9px', borderRadius: 20,
                           color: feasible ? 'var(--sage)' : 'var(--terra)',
                           background: feasible ? 'var(--done-bg)' : 'var(--miss-bg)',
                         }}>
                           {feasible ? `need ${needed}% final` : 'AT RISK'}
                         </span>
-                        <span style={{ fontFamily: 'Fraunces,serif', fontSize: 15, fontWeight: 700, color: scoreColor(mid) }}>
-                          {mid}%
-                        </span>
-                      </div>
+                      )}
                     </div>
 
-                    {/* Stacked bar: mid contribution + needed final */}
-                    <div style={{ height: 7, background: 'var(--cream-deep)', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
-                      {/* Mid portion */}
-                      <div style={{
-                        width: `${weight}%`, height: '100%',
-                        background: `${mod.color || 'var(--sage)'}`,
-                        opacity: 0.7,
-                      }} />
-                      {/* Final portion */}
-                      <div style={{ width: `${finalW}%`, height: '100%', background: 'var(--cream-deep)' }}>
-                        {/* Target fill within final portion */}
+                    {/* Component pills */}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                      {/* Mid */}
+                      {midW > 0 && (
                         <div style={{
-                          width: `${Math.min(100, needed)}%`, height: '100%',
-                          background: feasible ? `${mod.color || 'var(--sage)'}55` : 'var(--terra)',
-                          opacity: 0.5,
-                        }} />
-                      </div>
+                          flex: 1, minWidth: 80, background: mod.mid_mark != null ? 'var(--done-bg)' : 'var(--cream-dark)',
+                          borderRadius: 10, padding: '8px 10px', textAlign: 'center',
+                        }}>
+                          <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--ink-pale)', marginBottom: 3 }}>Mid · {midW}%</div>
+                          {mod.mid_mark != null ? (
+                            <div style={{ fontFamily: 'Fraunces,serif', fontSize: 16, fontWeight: 700, color: scoreColor(mod.mid_mark) }}>
+                              {mod.mid_mark}%
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12, color: 'var(--ink-pale)' }}>—</div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Project / Assignment */}
+                      {projW > 0 && (
+                        <div style={{
+                          flex: 1, minWidth: 80,
+                          background: projPct != null ? (projPct >= 70 ? 'var(--done-bg)' : projPct >= 55 ? 'var(--gold-dim)' : 'var(--miss-bg)') : 'var(--cream-dark)',
+                          borderRadius: 10, padding: '8px 10px', textAlign: 'center',
+                        }}>
+                          <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--ink-pale)', marginBottom: 3 }}>
+                            {proj?.type || 'Project'} · {projW}%
+                          </div>
+                          {proj?.scored != null && proj?.outOf != null ? (
+                            <>
+                              <div style={{ fontFamily: 'Fraunces,serif', fontSize: 15, fontWeight: 700, color: scoreColor(projPct), lineHeight: 1 }}>
+                                {proj.scored}/{proj.outOf}
+                              </div>
+                              <div style={{ fontSize: 10, color: scoreColor(projPct), fontWeight: 700, marginTop: 1 }}>{projPct}%</div>
+                            </>
+                          ) : (
+                            <div style={{ fontSize: 12, color: 'var(--ink-pale)' }}>—</div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Final */}
+                      {finalW > 0 && (
+                        <div style={{
+                          flex: 1, minWidth: 80,
+                          background: needed != null && !feasible ? 'var(--miss-bg)' : 'var(--cream-dark)',
+                          borderRadius: 10, padding: '8px 10px', textAlign: 'center',
+                          border: needed != null && !feasible ? '1.5px solid var(--miss-border)' : 'none',
+                        }}>
+                          <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--ink-pale)', marginBottom: 3 }}>Final · {finalW}%</div>
+                          {needed != null ? (
+                            <div style={{ fontFamily: 'Fraunces,serif', fontSize: 16, fontWeight: 700, color: feasible ? 'var(--sage)' : 'var(--terra)' }}>
+                              {needed}%
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12, color: 'var(--ink-pale)' }}>—</div>
+                          )}
+                          <div style={{ fontSize: 9, color: 'var(--ink-pale)', marginTop: 1 }}>needed</div>
+                        </div>
+                      )}
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-                      <span style={{ fontSize: 10, color: 'var(--ink-pale)', fontWeight: 600 }}>
-                        Mid {weight}% weight · scored {mid}%
-                      </span>
-                      <span style={{ fontSize: 10, color: feasible ? 'var(--sage)' : 'var(--terra)', fontWeight: 700 }}>
-                        Final {finalW}% → need {needed}%
-                      </span>
+                    {/* Stacked weight bar */}
+                    <div style={{ height: 6, borderRadius: 3, overflow: 'hidden', display: 'flex', gap: 2 }}>
+                      {midW > 0 && <div style={{ width: `${midW}%`, height: '100%', background: mod.color || 'var(--sage)', borderRadius: 3 }} />}
+                      {projW > 0 && <div style={{ width: `${projW}%`, height: '100%', background: 'var(--gold)', borderRadius: 3 }} />}
+                      {finalW > 0 && <div style={{ width: `${finalW}%`, height: '100%', background: feasible ? 'var(--border)' : 'var(--terra)', opacity: 0.5, borderRadius: 3 }} />}
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, marginTop: 5 }}>
+                      {midW > 0 && <span style={{ fontSize: 9, color: 'var(--ink-pale)', fontWeight: 600 }}>■ Mid {midW}%</span>}
+                      {projW > 0 && <span style={{ fontSize: 9, color: 'var(--gold)', fontWeight: 600 }}>■ Project {projW}%</span>}
+                      {finalW > 0 && <span style={{ fontSize: 9, color: 'var(--ink-pale)', fontWeight: 600 }}>■ Final {finalW}%</span>}
                     </div>
                   </div>
                 )
