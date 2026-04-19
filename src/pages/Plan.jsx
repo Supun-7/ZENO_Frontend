@@ -1,12 +1,578 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../api'
 
+/* ─── Helpers ─────────────────────────────────────────────────────────────── */
+const PALETTE = ['#5C8A6B','#C0604A','#C9943A','#5B7EC4','#9B6EC4','#3E9E9E','#B06040']
+
+const lbl = {
+  display: 'block', fontSize: 11, fontWeight: 700,
+  letterSpacing: '0.7px', textTransform: 'uppercase',
+  color: 'var(--ink-soft)', marginBottom: 7,
+}
+
+/* ─── Confidence pill row ─────────────────────────────────────────────────── */
+function ConfidencePicker({ value, onChange }) {
+  const labels = ['', 'Struggling', 'Shaky', 'Okay', 'Solid', 'Confident']
+  return (
+    <div>
+      <label style={lbl}>
+        Confidence&nbsp;
+        <span style={{ color: 'var(--ink-pale)', fontWeight: 400, textTransform: 'none' }}>
+          — {labels[value]}
+        </span>
+      </label>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {[1,2,3,4,5].map(n => {
+          const active = value === n
+          const trackColor = n <= 2 ? 'var(--terra)' : n === 3 ? 'var(--gold)' : 'var(--sage)'
+          return (
+            <button key={n} onClick={() => onChange(n)} style={{
+              flex: 1, padding: '11px 0', borderRadius: 10, cursor: 'pointer',
+              fontFamily: 'Outfit,sans-serif', fontSize: 13, fontWeight: 800,
+              transition: 'all 0.15s ease',
+              background: active ? trackColor : 'var(--white)',
+              color: active ? '#fff' : 'var(--ink-soft)',
+              border: active ? `2px solid ${trackColor}` : '1.5px solid var(--border)',
+              boxShadow: active ? `0 3px 10px ${trackColor}33` : 'none',
+              transform: active ? 'translateY(-1px)' : 'none',
+            }}>
+              {n}
+            </button>
+          )
+        })}
+      </div>
+      <p style={{ fontSize: 11, color: 'var(--ink-pale)', marginTop: 6 }}>
+        1 = needs most focus&nbsp;·&nbsp;5 = very comfortable
+      </p>
+    </div>
+  )
+}
+
+/* ─── Edit Module Bottom Sheet ────────────────────────────────────────────── */
+function EditSheet({ mod, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    name:             mod.name || '',
+    credits:          mod.credits ?? 3,
+    midMark:          mod.mid_mark ?? '',
+    midWeight:        mod.mid_weight ?? 30,
+    confidenceRating: mod.confidence_rating ?? 3,
+    overviewText:     mod.overview_text || '',
+    color:            mod.color || '#5C8A6B',
+  })
+  const [saving, setSaving]   = useState(false)
+  const [error,  setError]    = useState('')
+  const [section, setSection] = useState('info') // 'info' | 'overview'
+  const overlayRef = useRef()
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
+
+  async function save() {
+    if (!form.name.trim()) { setError('Module name is required'); return }
+    setSaving(true); setError('')
+    try {
+      const updated = await api.modules.update(mod.id, {
+        name:             form.name.trim(),
+        credits:          parseFloat(form.credits) || 3,
+        midMark:          form.midMark !== '' ? parseFloat(form.midMark) : null,
+        midWeight:        parseFloat(form.midWeight) || 30,
+        confidenceRating: parseInt(form.confidenceRating) || 3,
+        overviewText:     form.overviewText.trim() || null,
+        color:            form.color,
+      })
+      onSaved(updated)
+      onClose()
+    } catch (e) { setError(e.message || 'Failed to save') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div ref={overlayRef}
+      onClick={e => e.target === overlayRef.current && onClose()}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 300,
+        background: 'rgba(26,22,15,0.5)',
+        backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        animation: 'sheetFadeIn 0.2s ease both',
+      }}>
+      <div style={{
+        width: '100%', maxWidth: 440,
+        background: 'var(--cream)',
+        borderRadius: '26px 26px 0 0',
+        maxHeight: '93vh', overflowY: 'auto',
+        animation: 'sheetSlideUp 0.3s cubic-bezier(0.34,1.1,0.64,1) both',
+        boxShadow: '0 -12px 48px rgba(26,22,15,0.22)',
+        paddingBottom: 'max(env(safe-area-inset-bottom), 20px)',
+      }}>
+        {/* Drag handle */}
+        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 14, paddingBottom: 4 }}>
+          <div style={{ width: 38, height: 4, borderRadius: 2, background: 'var(--border)' }} />
+        </div>
+
+        {/* Sheet header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 22px 0',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: form.color, boxShadow: `0 0 0 3px ${form.color}33`, flexShrink: 0 }} />
+            <div>
+              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--sage)', marginBottom: 2 }}>
+                Edit module
+              </p>
+              <h3 style={{ fontFamily: 'Fraunces,serif', fontSize: 20, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.2 }}>
+                {form.name || mod.name}
+              </h3>
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 34, height: 34, borderRadius: 11, border: '1.5px solid var(--border)',
+            background: 'var(--white)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--ink-soft)', fontSize: 19, lineHeight: 1,
+            fontFamily: 'Outfit,sans-serif', flexShrink: 0,
+          }}>×</button>
+        </div>
+
+        {/* Section tabs */}
+        <div style={{ display: 'flex', gap: 6, padding: '18px 22px 0' }}>
+          {[['info','Module info'], ['overview','AI overview']].map(([id, label]) => (
+            <button key={id} onClick={() => setSection(id)} style={{
+              flex: 1, padding: '9px 0', borderRadius: 10, cursor: 'pointer',
+              fontFamily: 'Outfit,sans-serif', fontSize: 12, fontWeight: 700,
+              transition: 'all 0.18s ease',
+              background: section === id ? 'var(--ink)' : 'var(--white)',
+              color: section === id ? 'var(--cream)' : 'var(--ink-soft)',
+              border: section === id ? '1.5px solid var(--ink)' : '1.5px solid var(--border)',
+            }}>
+              {section === id && '✓ '}{label}
+              {id === 'overview' && !form.overviewText && (
+                <span style={{ marginLeft: 4, fontSize: 9, color: section === id ? 'var(--gold)' : 'var(--terra)', fontWeight: 800 }}>●</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ padding: '20px 22px 0', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {section === 'info' ? (
+            <>
+              {/* Name */}
+              <div>
+                <label style={lbl}>Module name</label>
+                <input value={form.name} onChange={e => set('name', e.target.value)}
+                  placeholder="e.g. Operating Systems" />
+              </div>
+
+              {/* Credits + Mid Weight */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={lbl}>Credits</label>
+                  <input type="number" min="1" max="6" step="0.5"
+                    value={form.credits} onChange={e => set('credits', e.target.value)} />
+                </div>
+                <div>
+                  <label style={lbl}>Mid weight %</label>
+                  <input type="number" min="0" max="70" step="5"
+                    value={form.midWeight} onChange={e => set('midWeight', e.target.value)} />
+                </div>
+              </div>
+
+              {/* Mid mark */}
+              <div>
+                <label style={lbl}>
+                  Mid-exam mark&nbsp;
+                  <span style={{ color: 'var(--ink-pale)', fontWeight: 400, textTransform: 'none' }}>
+                    (leave blank if not sat)
+                  </span>
+                </label>
+                <input type="number" min="0" max="100" step="0.5"
+                  value={form.midMark} onChange={e => set('midMark', e.target.value)}
+                  placeholder="e.g. 72.5" />
+              </div>
+
+              {/* Confidence */}
+              <ConfidencePicker value={form.confidenceRating} onChange={v => set('confidenceRating', v)} />
+
+              {/* Colour */}
+              <div>
+                <label style={lbl}>Module colour</label>
+                <div style={{ display: 'flex', gap: 10, marginTop: 2 }}>
+                  {PALETTE.map(c => (
+                    <button key={c} onClick={() => set('color', c)} style={{
+                      width: 30, height: 30, borderRadius: '50%', background: c,
+                      cursor: 'pointer', transition: 'all 0.15s',
+                      border: form.color === c ? '3px solid var(--ink)' : '2px solid transparent',
+                      outline: form.color === c ? '2px solid var(--cream)' : 'none',
+                      outlineOffset: '-4px',
+                      transform: form.color === c ? 'scale(1.15)' : 'scale(1)',
+                    }} />
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Overview tab */}
+              <div style={{
+                background: form.overviewText ? 'var(--sage-dim)' : 'var(--gold-dim)',
+                borderRadius: 14, padding: '14px 16px',
+                border: `1.5px solid ${form.overviewText ? 'rgba(92,138,107,0.2)' : 'rgba(201,148,58,0.2)'}`,
+              }}>
+                <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.6px', textTransform: 'uppercase',
+                  color: form.overviewText ? 'var(--sage)' : 'var(--gold)', marginBottom: 6 }}>
+                  {form.overviewText ? '✦ AI ready' : '⚠ Required for AI analysis'}
+                </p>
+                <p style={{ fontSize: 12, color: 'var(--ink-mid)', lineHeight: 1.65 }}>
+                  {form.overviewText
+                    ? 'Overview text is set. You can re-run AI analysis from the module card.'
+                    : 'Paste your course syllabus, lecture topics, or exam outline below. The AI uses this to recommend exactly how many hours to study each week.'}
+                </p>
+              </div>
+              <div>
+                <label style={lbl}>Course overview / syllabus</label>
+                <textarea
+                  value={form.overviewText}
+                  onChange={e => set('overviewText', e.target.value)}
+                  placeholder="Paste your module syllabus, topic list, lecture summaries, or exam guide here..."
+                  style={{ minHeight: 180, resize: 'vertical', lineHeight: 1.65, fontSize: 13 }}
+                />
+                {form.overviewText && (
+                  <p style={{ fontSize: 11, color: 'var(--ink-pale)', marginTop: 6 }}>
+                    {form.overviewText.length} characters
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div style={{ background: 'var(--miss-bg)', border: '1.5px solid var(--miss-border)', borderRadius: 12, padding: '11px 14px' }}>
+              <p style={{ fontSize: 13, color: 'var(--terra)', fontWeight: 500 }}>{error}</p>
+            </div>
+          )}
+
+          {/* Save button */}
+          <button onClick={save} disabled={saving} className="btn-primary"
+            style={{ opacity: saving ? 0.65 : 1, marginBottom: 8 }}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes sheetFadeIn  { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes sheetSlideUp { from { transform: translateY(60px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+      `}</style>
+    </div>
+  )
+}
+
+/* ─── Stat Badge ──────────────────────────────────────────────────────────── */
+function StatBadge({ label, value, color }) {
+  return (
+    <div style={{ flex: 1, background: 'var(--cream-dark)', borderRadius: 12, padding: '11px 8px', textAlign: 'center' }}>
+      <div style={{ fontFamily: 'Fraunces,serif', fontSize: 19, fontWeight: 700, color: color || 'var(--ink)', lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 10, color: 'var(--ink-pale)', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: 3 }}>{label}</div>
+    </div>
+  )
+}
+
+/* ─── Module Card ─────────────────────────────────────────────────────────── */
+function ModuleCard({ mod, idx, isOpen, onToggle, onEdit, onReAnalyze, analyzing, stat, targetPct }) {
+  const hasMid   = mod.mid_mark != null && mod.mid_weight != null
+  const finalW   = 100 - (mod.mid_weight || 0)
+  const needed   = hasMid && finalW > 0
+    ? Math.round((targetPct - (mod.mid_weight / 100) * mod.mid_mark) / (finalW / 100))
+    : targetPct
+  const feasible = needed <= 100
+  const recH     = mod.recommended_hours?.perWeek
+  const doneH    = stat?.totalHours || 0
+  const progress = recH ? Math.min(100, Math.round((doneH / recH) * 100)) : 0
+  const hasOverview = !!mod.overview_text
+
+  // Confidence colour
+  const conf = mod.confidence_rating || 3
+  const confColor = conf <= 2 ? 'var(--terra)' : conf === 3 ? 'var(--gold)' : 'var(--sage)'
+
+  return (
+    <div style={{
+      background: 'var(--white)',
+      borderRadius: 18,
+      marginBottom: 10,
+      border: `1.5px solid ${isOpen ? mod.color + '55' : 'var(--border-soft)'}`,
+      borderLeft: `5px solid ${mod.color}`,
+      overflow: 'hidden',
+      boxShadow: isOpen
+        ? `0 8px 32px ${mod.color}20, 0 2px 8px rgba(26,22,15,0.06)`
+        : 'var(--card-shadow)',
+      transition: 'border-color 0.25s, box-shadow 0.3s',
+      animation: `fadeUp 0.4s ${idx * 0.06}s ease both`,
+    }}>
+
+      {/* ── Collapsed header ── */}
+      <div onClick={() => onToggle(mod.id)}
+        style={{ padding: '15px 14px 14px', cursor: 'pointer', userSelect: 'none' }}>
+
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          {/* Left: name + meta */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5, flexWrap: 'wrap' }}>
+              <h3 style={{ fontFamily: 'Fraunces,serif', fontSize: 16, color: 'var(--ink)', fontWeight: 600, lineHeight: 1.2 }}>
+                {mod.name}
+              </h3>
+              {!feasible && (
+                <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--terra)', background: 'var(--miss-bg)', padding: '2px 7px', borderRadius: 20, letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>
+                  AT RISK
+                </span>
+              )}
+            </div>
+
+            {/* Metadata row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 500 }}>{mod.credits} cr</span>
+              {hasMid && (
+                <span style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 500 }}>
+                  Mid: <strong style={{ color: 'var(--ink)' }}>{mod.mid_mark}%</strong>
+                </span>
+              )}
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 20,
+                color: feasible ? 'var(--sage)' : 'var(--terra)',
+                background: feasible ? 'var(--done-bg)' : 'var(--miss-bg)',
+              }}>
+                {needed}% needed
+              </span>
+            </div>
+          </div>
+
+          {/* Right: hours + edit icon + chevron */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            {recH ? (
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontFamily: 'Fraunces,serif', fontSize: 20, fontWeight: 700, color: mod.color, lineHeight: 1 }}>{recH}h</div>
+                <div style={{ fontSize: 9, color: 'var(--ink-pale)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>/week</div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 10, color: 'var(--ink-pale)', fontStyle: 'italic', maxWidth: 48, textAlign: 'right', lineHeight: 1.3 }}>
+                {hasOverview ? 'Ready for AI' : 'No AI yet'}
+              </div>
+            )}
+
+            {/* Edit button */}
+            <button
+              onClick={e => { e.stopPropagation(); onEdit(mod) }}
+              title="Edit module"
+              style={{
+                width: 32, height: 32, borderRadius: 9,
+                border: '1.5px solid var(--border)',
+                background: 'var(--cream-dark)',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.18s ease', flexShrink: 0,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--ink)'; e.currentTarget.style.borderColor = 'var(--ink)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--cream-dark)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ color: 'var(--ink-soft)', pointerEvents: 'none', transition: 'color 0.18s' }}>
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+
+            {/* Chevron */}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="var(--ink-pale)" strokeWidth="2.2" strokeLinecap="round"
+              style={{ transition: 'transform 0.25s cubic-bezier(.4,0,.2,1)', transform: isOpen ? 'rotate(180deg)' : 'rotate(0)', flexShrink: 0 }}>
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        {recH && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ink-pale)', fontWeight: 600, marginBottom: 4 }}>
+              <span>{doneH.toFixed(1)}h studied this week</span>
+              <span style={{ color: progress >= 80 ? 'var(--sage)' : 'var(--ink-pale)' }}>{progress}%</span>
+            </div>
+            <div style={{ height: 5, background: 'var(--cream-deep)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', width: `${progress}%`,
+                background: `linear-gradient(90deg, ${mod.color}cc, ${mod.color})`,
+                borderRadius: 3,
+                transition: 'width 0.7s cubic-bezier(.4,0,.2,1)',
+              }} />
+            </div>
+          </div>
+        )}
+
+        {/* Inline status chips when collapsed */}
+        {!isOpen && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20,
+              background: confColor === 'var(--sage)' ? 'var(--done-bg)' : confColor === 'var(--gold)' ? 'var(--gold-dim)' : 'var(--miss-bg)',
+              color: confColor }}>
+              Conf {conf}/5
+            </span>
+            {hasOverview ? (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: 'var(--sage-dim)', color: 'var(--sage)' }}>
+                ✦ AI ready
+              </span>
+            ) : (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: 'var(--gold-dim)', color: 'var(--gold)' }}>
+                ⚠ Add overview
+              </span>
+            )}
+            {mod.recommended_hours && (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: `${mod.color}18`, color: mod.color }}>
+                {mod.recommended_hours.perWeek}h/wk plan
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Expanded section ── */}
+      {isOpen && (
+        <div style={{ borderTop: '1px solid var(--border-soft)', animation: 'expandIn 0.22s ease both' }}>
+
+          {/* AI block */}
+          <div style={{ padding: '16px 14px' }}>
+            {mod.recommended_hours ? (
+              <div style={{
+                background: `linear-gradient(135deg, ${mod.color}14, ${mod.color}08)`,
+                border: `1.5px solid ${mod.color}30`,
+                borderRadius: 14, padding: '14px',
+              }}>
+                <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.7px', textTransform: 'uppercase', color: mod.color, marginBottom: 12 }}>
+                  ✦ AI Study Plan
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                  {[
+                    { l: 'Per week',    v: `${mod.recommended_hours.perWeek}h` },
+                    { l: 'Total needed', v: `${mod.recommended_hours.totalNeeded}h` },
+                  ].map((c, i) => (
+                    <div key={i} style={{ background: 'var(--white)', borderRadius: 10, padding: '12px', textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'Fraunces,serif', fontSize: 22, fontWeight: 700, color: mod.color, lineHeight: 1 }}>{c.v}</div>
+                      <div style={{ fontSize: 10, color: 'var(--ink-pale)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 3 }}>{c.l}</div>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--ink-mid)', lineHeight: 1.7, marginBottom: 12 }}>
+                  {mod.recommended_hours.reasoning}
+                </p>
+                <button onClick={() => onReAnalyze(mod.id)} disabled={analyzing[mod.id]} style={{
+                  padding: '7px 16px', borderRadius: 9,
+                  border: `1.5px solid ${mod.color}`,
+                  background: 'transparent', color: mod.color,
+                  fontSize: 12, cursor: 'pointer', fontFamily: 'Outfit,sans-serif', fontWeight: 700,
+                  opacity: analyzing[mod.id] ? 0.5 : 1,
+                  transition: 'all 0.15s',
+                }}>
+                  {analyzing[mod.id] ? '↺ Re-analysing…' : '↺ Re-analyse'}
+                </button>
+              </div>
+            ) : hasOverview ? (
+              <div style={{ background: 'var(--sage-dim)', borderRadius: 14, padding: '16px', display: 'flex', gap: 14, alignItems: 'center' }}>
+                <span style={{ fontSize: 24, flexShrink: 0 }}>✦</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Ready to analyse</p>
+                  <p style={{ fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.6, marginBottom: 10 }}>
+                    Your course overview is set — run the AI now to get a personalised study plan.
+                  </p>
+                  <button onClick={() => onReAnalyze(mod.id)} disabled={analyzing[mod.id]} className="btn-sage" style={{ width: 'auto', padding: '8px 20px', fontSize: 13 }}>
+                    {analyzing[mod.id] ? 'Analysing with AI…' : '✦ Run AI Analysis'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ background: 'var(--cream-dark)', borderRadius: 14, padding: '16px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                <span style={{ fontSize: 24, flexShrink: 0 }}>📋</span>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Add a course overview to unlock AI</p>
+                  <p style={{ fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.65, marginBottom: 12 }}>
+                    Paste your syllabus or topic list — the AI will analyse it and build a personalised weekly study plan just for this module.
+                  </p>
+                  <button onClick={e => { e.stopPropagation(); onEdit(mod) }} style={{
+                    padding: '8px 18px', borderRadius: 9, border: 'none',
+                    background: 'var(--ink)', color: 'var(--cream)',
+                    fontSize: 12, fontFamily: 'Outfit,sans-serif', fontWeight: 700, cursor: 'pointer',
+                  }}>
+                    ✎ Open editor
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Topics */}
+          {mod.topics?.length > 0 && (
+            <div style={{ padding: '0 14px 14px', borderTop: '1px solid var(--border-soft)', paddingTop: 14 }}>
+              <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--ink-pale)', marginBottom: 12 }}>
+                Exam topics
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {mod.topics.map((t, i) => (
+                  <div key={i}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                      <span style={{
+                        width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                        background: t.weight === 'high' ? 'var(--terra)' : t.weight === 'medium' ? 'var(--gold)' : 'var(--sage)',
+                      }} />
+                      <span style={{ fontFamily: 'Fraunces,serif', fontSize: 14, color: 'var(--ink)', fontWeight: 600 }}>{t.topic}</span>
+                      <span style={{
+                        fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 20, marginLeft: 'auto',
+                        background: t.weight === 'high' ? 'var(--terra-dim)' : t.weight === 'medium' ? 'var(--gold-dim)' : 'var(--sage-dim)',
+                        color: t.weight === 'high' ? 'var(--terra)' : t.weight === 'medium' ? 'var(--gold)' : 'var(--sage)',
+                      }}>
+                        {t.weight}
+                      </span>
+                    </div>
+                    {t.subtopics?.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 15 }}>
+                        {t.subtopics.map((st, j) => (
+                          <span key={j} style={{ fontSize: 11, color: 'var(--ink-soft)', background: 'var(--cream-dark)', padding: '3px 9px', borderRadius: 7 }}>
+                            {st}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Performance stats */}
+          {stat?.totalSessions > 0 && (
+            <div style={{ padding: '0 14px 16px', borderTop: '1px solid var(--border-soft)', paddingTop: 14 }}>
+              <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--ink-pale)', marginBottom: 10 }}>
+                Your performance
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <StatBadge label="Hours"    value={stat.totalHours + 'h'} color={mod.color} />
+                <StatBadge label="Sessions" value={stat.totalSessions} />
+                <StatBadge label="Avg score" value={stat.avgEfficiency ? stat.avgEfficiency + '/100' : '—'} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Main Page ───────────────────────────────────────────────────────────── */
 export default function PlanPage({ profile }) {
-  const [modules, setModules]     = useState([])
-  const [stats, setStats]         = useState([])
-  const [expanded, setExpanded]   = useState(null)
+  const [modules,   setModules]   = useState([])
+  const [stats,     setStats]     = useState([])
+  const [expanded,  setExpanded]  = useState(null)
   const [analyzing, setAnalyzing] = useState({})
-  const [loading, setLoading]     = useState(true)
+  const [loading,   setLoading]   = useState(true)
+  const [editMod,   setEditMod]   = useState(null)
 
   useEffect(() => { load() }, [])
 
@@ -21,179 +587,122 @@ export default function PlanPage({ profile }) {
   }
 
   async function reAnalyze(id) {
-    setAnalyzing(p => ({ ...p, [id]:true }))
+    setAnalyzing(p => ({ ...p, [id]: true }))
     try {
       const updated = await api.modules.analyze(id)
       setModules(p => p.map(m => m.id === id ? updated : m))
     } catch (err) { alert('Analysis failed: ' + err.message) }
-    finally { setAnalyzing(p => ({ ...p, [id]:false })) }
+    finally { setAnalyzing(p => ({ ...p, [id]: false })) }
   }
 
-  const GRADE_MIN = { 'A':75, 'B+':70, 'B':65 }
+  const GRADE_MIN = { A: 75, 'B+': 70, B: 65 }
   const targetPct = GRADE_MIN[profile?.target_grade] || 75
   const weeksLeft = profile?.exam_date
-    ? Math.max(1, Math.ceil((new Date(profile.exam_date) - new Date()) / (1000*60*60*24*7)))
-    : 5
+    ? Math.max(1, Math.ceil((new Date(profile.exam_date) - new Date()) / (1000*60*60*24*7))) : 5
 
-  function neededFinal(mod) {
-    if (!mod.mid_weight || mod.mid_mark == null) return targetPct
-    const n = (targetPct - (mod.mid_weight / 100) * mod.mid_mark) / ((100 - mod.mid_weight) / 100)
-    return Math.round(Math.max(0, Math.min(110, n)))
-  }
-
-  function getStatFor(id) { return stats.find(s => s.moduleId === id) }
+  const totalH    = modules.reduce((s, m) => s + (m.recommended_hours?.perWeek || 0), 0)
+  const withAI    = modules.filter(m => m.recommended_hours).length
+  const needsAttn = modules.filter(m => !m.overview_text).length
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh' }}>
-      <p style={{ color:'var(--ink-pale)', fontSize:14 }}>Loading modules...</p>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', gap: 12 }}>
+      <div style={{ width: 26, height: 26, borderRadius: '50%', border: '2.5px solid var(--border)', borderTopColor: 'var(--sage)', animation: 'spin 0.8s linear infinite' }} />
+      <p style={{ color: 'var(--ink-pale)', fontSize: 13 }}>Loading modules…</p>
     </div>
   )
 
   return (
-    <div style={{ padding:'28px 20px 100px', maxWidth:440, margin:'0 auto' }}>
-      <div style={{ marginBottom:26 }}>
-        <p style={{ fontSize:11, fontWeight:700, letterSpacing:'0.8px', textTransform:'uppercase', color:'var(--sage)', marginBottom:5 }}>
-          TARGET {profile?.target_grade} · {weeksLeft} WEEKS LEFT
+    <div style={{ padding: '28px 20px 110px', maxWidth: 440, margin: '0 auto' }}>
+
+      {/* ── Page header ── */}
+      <div style={{ marginBottom: 20, animation: 'fadeUp 0.35s ease both' }}>
+        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.9px', textTransform: 'uppercase', color: 'var(--sage)', marginBottom: 5 }}>
+          Target {profile?.target_grade || 'A'} · {weeksLeft} weeks left
         </p>
-        <h2 style={{ fontFamily:'Fraunces,serif', fontSize:28, fontWeight:700, color:'var(--ink)', letterSpacing:'-0.3px' }}>
+        <h2 style={{ fontFamily: 'Fraunces,serif', fontSize: 27, fontWeight: 700, color: 'var(--ink)', letterSpacing: '-0.3px', marginBottom: 3 }}>
           Your modules
         </h2>
+        <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+          {modules.length} module{modules.length !== 1 ? 's' : ''}
+          {withAI > 0 && <span style={{ color: 'var(--sage)', fontWeight: 600 }}> · {withAI} with AI plan</span>}
+          {needsAttn > 0 && <span style={{ color: 'var(--gold)', fontWeight: 600 }}> · {needsAttn} need overview</span>}
+        </p>
       </div>
 
-      {modules.map((mod, idx) => {
-        const needed   = neededFinal(mod)
-        const feasible = needed <= 100
-        const recH     = mod.recommended_hours?.perWeek
-        const stat     = getStatFor(mod.id)
-        const doneH    = stat?.totalHours || 0
-        const pct      = recH ? Math.min(100, Math.round((doneH / recH) * 100)) : 0
-
-        return (
-          <div key={mod.id} style={{
-            background:'var(--white)', borderRadius:18, marginBottom:12,
-            border:`1.5px solid ${expanded === mod.id ? mod.color+'44' : 'var(--border-soft)'}`,
-            borderLeft:`5px solid ${mod.color}`,
-            overflow:'hidden',
-            boxShadow:'var(--card-shadow)',
-            transition:'border-color 0.2s, box-shadow 0.2s',
-            animation:`fadeUp 0.4s ${idx*0.05}s ease both`,
-          }}>
-            <div onClick={() => setExpanded(expanded === mod.id ? null : mod.id)}
-              style={{ padding:'16px', cursor:'pointer' }}>
-              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:10 }}>
-                <div style={{ flex:1 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:5 }}>
-                    <h3 style={{ fontFamily:'Fraunces,serif', fontSize:18, color:'var(--ink)', fontWeight:600 }}>{mod.name}</h3>
-                    {!feasible && (
-                      <span style={{ fontSize:10, fontWeight:800, color:'var(--terra)', background:'var(--miss-bg)', padding:'2px 9px', borderRadius:20, letterSpacing:'0.3px' }}>
-                        AT RISK
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display:'flex', gap:12, fontSize:12, color:'var(--ink-soft)', fontWeight:500, flexWrap:'wrap' }}>
-                    <span>{mod.credits} credits</span>
-                    {mod.mid_mark != null && <span>Mid: {mod.mid_mark}%</span>}
-                    <span style={{ color:feasible ? 'var(--sage)' : 'var(--terra)', fontWeight:700 }}>
-                      Need {needed}% final
-                    </span>
-                  </div>
-                </div>
-                <div style={{ textAlign:'right', flexShrink:0, marginLeft:12 }}>
-                  {recH ? (
-                    <>
-                      <div style={{ fontFamily:'Fraunces,serif', fontSize:24, fontWeight:700, color:mod.color, lineHeight:1 }}>{recH}h</div>
-                      <div style={{ fontSize:10, color:'var(--ink-pale)', textTransform:'uppercase', letterSpacing:'0.3px', marginTop:2 }}>/ week</div>
-                    </>
-                  ) : (
-                    <div style={{ fontSize:11, color:'var(--ink-pale)' }}>No AI yet</div>
-                  )}
-                </div>
-              </div>
-
-              {recH && (
-                <div>
-                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--ink-pale)', fontWeight:500, marginBottom:5 }}>
-                    <span>{doneH.toFixed(1)}h studied</span>
-                    <span>{Math.max(0, recH - doneH).toFixed(1)}h remaining</span>
-                  </div>
-                  <div style={{ height:6, background:'var(--cream-deep)', borderRadius:3, overflow:'hidden' }}>
-                    <div style={{ height:'100%', width:`${pct}%`, background:mod.color, borderRadius:3, transition:'width 0.6s cubic-bezier(.4,0,.2,1)' }} />
-                  </div>
-                </div>
-              )}
+      {/* ── Summary strip ── */}
+      {modules.length > 0 && (
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+          background: 'var(--white)', borderRadius: 16, overflow: 'hidden',
+          border: '1px solid var(--border-soft)', boxShadow: 'var(--card-shadow)',
+          marginBottom: 16, animation: 'fadeUp 0.35s 0.05s ease both',
+        }}>
+          {[
+            { label: 'Weekly target', value: totalH > 0 ? `${totalH}h` : '—' },
+            { label: 'Modules',       value: modules.length },
+            { label: 'Weeks left',    value: weeksLeft },
+          ].map((c, i) => (
+            <div key={i} style={{
+              padding: '14px 8px', textAlign: 'center',
+              borderRight: i < 2 ? '1px solid var(--border-soft)' : 'none',
+            }}>
+              <div style={{ fontFamily: 'Fraunces,serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', lineHeight: 1 }}>{c.value}</div>
+              <div style={{ fontSize: 10, color: 'var(--ink-pale)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 4 }}>{c.label}</div>
             </div>
+          ))}
+        </div>
+      )}
 
-            {expanded === mod.id && (
-              <div style={{ borderTop:'1px solid var(--border-soft)', padding:'16px' }}>
-                {mod.recommended_hours ? (
-                  <div style={{ background:'var(--sage-dim)', borderRadius:14, padding:'14px', marginBottom:16 }}>
-                    <p style={{ fontSize:11, color:'var(--sage)', fontWeight:800, letterSpacing:'0.6px', textTransform:'uppercase', marginBottom:10 }}>AI Recommendation</p>
-                    <div style={{ display:'flex', gap:10, marginBottom:12 }}>
-                      {[{ l:'Per week', v:`${mod.recommended_hours.perWeek}h` }, { l:'Total', v:`${mod.recommended_hours.totalNeeded}h` }].map((c,i) => (
-                        <div key={i} style={{ flex:1, background:'var(--white)', borderRadius:10, padding:'12px', textAlign:'center' }}>
-                          <div style={{ fontFamily:'Fraunces,serif', fontSize:24, fontWeight:700, color:mod.color }}>{c.v}</div>
-                          <div style={{ fontSize:10, color:'var(--ink-pale)', textTransform:'uppercase', letterSpacing:'0.3px', marginTop:2 }}>{c.l}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <p style={{ fontSize:13, color:'var(--ink-mid)', lineHeight:1.6 }}>{mod.recommended_hours.reasoning}</p>
-                    <button onClick={() => reAnalyze(mod.id)} disabled={analyzing[mod.id]} style={{
-                      marginTop:10, padding:'6px 14px', borderRadius:9, border:'1.5px solid var(--sage)',
-                      background:'transparent', color:'var(--sage)', fontSize:12, cursor:'pointer',
-                      fontFamily:'Outfit,sans-serif', fontWeight:700
-                    }}>
-                      {analyzing[mod.id] ? 'Analysing...' : '↺ Re-analyse'}
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => reAnalyze(mod.id)} disabled={analyzing[mod.id] || !mod.overview_text}
-                    className="btn-primary" style={{ marginBottom:16, fontSize:14 }}>
-                    {analyzing[mod.id] ? 'Analysing with AI...' : mod.overview_text ? '✦ Run AI Analysis' : 'Add overview text to enable AI'}
-                  </button>
-                )}
+      {/* ── Attention banner if modules need overview ── */}
+      {needsAttn > 0 && modules.length > 0 && (
+        <div style={{
+          background: 'var(--gold-dim)', border: '1.5px solid rgba(201,148,58,0.25)',
+          borderRadius: 14, padding: '12px 14px', marginBottom: 14,
+          display: 'flex', gap: 10, alignItems: 'center',
+          animation: 'fadeUp 0.35s 0.08s ease both',
+        }}>
+          <span style={{ fontSize: 18, flexShrink: 0 }}>⚠</span>
+          <p style={{ fontSize: 12, color: 'var(--gold)', fontWeight: 600, lineHeight: 1.5 }}>
+            {needsAttn} module{needsAttn > 1 ? 's' : ''} missing a course overview —
+            tap the <strong>✎ edit icon</strong> to add one and unlock AI analysis.
+          </p>
+        </div>
+      )}
 
-                {mod.topics?.length > 0 && (
-                  <div style={{ marginBottom:16 }}>
-                    <p style={{ fontSize:11, color:'var(--ink-soft)', fontWeight:800, letterSpacing:'0.6px', textTransform:'uppercase', marginBottom:10 }}>Exam topics</p>
-                    {mod.topics.map((t, i) => (
-                      <div key={i} style={{ marginBottom:10 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:5 }}>
-                          <span style={{ fontFamily:'Fraunces,serif', fontSize:14, color:'var(--ink)', fontWeight:600 }}>{t.topic}</span>
-                          <span style={{ fontSize:10, fontWeight:800, padding:'2px 9px', borderRadius:20,
-                            background: t.weight==='high' ? 'var(--terra-dim)' : t.weight==='medium' ? 'var(--gold-dim)' : 'var(--sage-dim)',
-                            color: t.weight==='high' ? 'var(--terra)' : t.weight==='medium' ? 'var(--gold)' : 'var(--sage)'
-                          }}>{t.weight}</span>
-                        </div>
-                        {t.subtopics?.length > 0 && (
-                          <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
-                            {t.subtopics.map((st, j) => (
-                              <span key={j} style={{ fontSize:11, color:'var(--ink-soft)', background:'var(--cream-dark)', padding:'3px 9px', borderRadius:7 }}>{st}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+      {/* ── Cards ── */}
+      {modules.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: '48px 20px' }}>
+          <p style={{ fontFamily: 'Fraunces,serif', fontSize: 20, color: 'var(--ink-soft)', marginBottom: 8 }}>No modules yet</p>
+          <p style={{ fontSize: 14, color: 'var(--ink-pale)' }}>Add modules during setup to get started.</p>
+        </div>
+      ) : (
+        modules.map((mod, idx) => (
+          <ModuleCard
+            key={mod.id}
+            mod={mod} idx={idx}
+            isOpen={expanded === mod.id}
+            onToggle={id => setExpanded(p => p === id ? null : id)}
+            onEdit={setEditMod}
+            onReAnalyze={reAnalyze}
+            analyzing={analyzing}
+            stat={stats.find(s => s.moduleId === mod.id)}
+            targetPct={targetPct}
+          />
+        ))
+      )}
 
-                {stat?.totalSessions > 0 && (
-                  <div style={{ borderTop:'1px solid var(--border-soft)', paddingTop:14 }}>
-                    <p style={{ fontSize:11, color:'var(--ink-soft)', fontWeight:800, letterSpacing:'0.6px', textTransform:'uppercase', marginBottom:10 }}>Your performance</p>
-                    <div style={{ display:'flex', gap:8 }}>
-                      {[{ l:'Hours', v:stat.totalHours+'h' }, { l:'Sessions', v:stat.totalSessions }, { l:'Avg score', v:stat.avgEfficiency ? stat.avgEfficiency+'/100' : '—' }].map((c,i) => (
-                        <div key={i} style={{ flex:1, background:'var(--cream-dark)', borderRadius:12, padding:'12px', textAlign:'center' }}>
-                          <div style={{ fontFamily:'Fraunces,serif', fontSize:20, fontWeight:700, color:'var(--ink)' }}>{c.v}</div>
-                          <div style={{ fontSize:10, color:'var(--ink-pale)', textTransform:'uppercase', letterSpacing:'0.3px', marginTop:3 }}>{c.l}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )
-      })}
+      {/* ── Edit sheet ── */}
+      {editMod && (
+        <EditSheet
+          mod={editMod}
+          onClose={() => setEditMod(null)}
+          onSaved={updated => setModules(p => p.map(m => m.id === updated.id ? updated : m))}
+        />
+      )}
+
+      <style>{`
+        @keyframes expandIn { from { opacity: 0; transform: translateY(-6px) } to { opacity: 1; transform: translateY(0) } }
+      `}</style>
     </div>
   )
 }
